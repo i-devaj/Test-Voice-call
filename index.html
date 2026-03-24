@@ -612,6 +612,105 @@
   }
 
   audio { display: none; }
+
+  /* ── RESPONSIVE ─────────────────────────────────────────── */
+
+  /* Tablet (≤ 900px): stack sidebar above call area */
+  @media (max-width: 900px) {
+    html, body {
+      height: auto;
+      overflow: auto;
+    }
+
+    #app {
+      height: auto;
+      min-height: 100vh;
+    }
+
+    main {
+      grid-template-columns: 1fr;
+      overflow: visible;
+    }
+
+    aside {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      gap: 20px;
+      padding: 20px 18px;
+    }
+
+    .log {
+      max-height: 140px;
+    }
+
+    .call-area {
+      padding: 24px 20px;
+      min-height: 50vh;
+    }
+  }
+
+  /* Mobile (≤ 540px): tighten spacing and scale down elements */
+  @media (max-width: 540px) {
+    header {
+      padding: 14px 16px;
+    }
+
+    .logo {
+      font-size: 1.2rem;
+    }
+
+    .status-pill {
+      font-size: 0.65rem;
+      padding: 5px 10px;
+    }
+
+    aside {
+      padding: 16px;
+      gap: 16px;
+    }
+
+    .id-display {
+      font-size: 0.9rem;
+    }
+
+    .call-area {
+      gap: 20px;
+      padding: 20px 12px;
+    }
+
+    .avatar-ring {
+      width: 96px;
+      height: 96px;
+    }
+
+    .avatar-inner {
+      width: 72px;
+      height: 72px;
+      font-size: 1.8rem;
+    }
+
+    .peer-name {
+      font-size: 1.1rem;
+    }
+
+    .controls {
+      gap: 8px;
+      padding: 12px 16px;
+      border-radius: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .incoming-card {
+      padding: 28px 24px;
+      margin: 0 16px;
+      border-radius: 18px;
+    }
+
+    .incoming-card h2 {
+      font-size: 1.3rem;
+    }
+  }
 </style>
 </head>
 <body>
