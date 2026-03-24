@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vox — Voice & Screen Share</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #18181f;
+    --border: #2a2a35;
+    --accent: #6fffb0;
+    --accent2: #7b61ff;
+    --danger: #ff5757;
+    --text: #f0f0f8;
+    --muted: #6b6b80;
+    --glow: 0 0 24px rgba(111, 255, 176, 0.18);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow: hidden;
+  }
+
+  /* Ambient background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 10%, rgba(123, 97, 255, 0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 80% 90%, rgba(111, 255, 176, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+  }
+
+  .logo {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+    text-shadow: var(--glow);
+  }
+
+  .logo span {
+    color: var(--text);
+    opacity: 0.4;
+    font-weight: 400;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 6px 14px;
+    border-radius: 100px;
+    transition: all 0.3s;
+  }
+
+  .status-pill.connected {
+    color: var(--accent);
+    border-color: rgba(111, 255, 176, 0.3);
+    background: rgba(111, 255, 176, 0.05);
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: all 0.3s;
+  }
+
+  .status-pill.connected .dot {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.85); }
+  }
+
+  /* MAIN */
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    overflow: hidden;
+  }
+
+  /* SIDEBAR */
+  aside {
+    border-right: 1px solid var(--border);
+    padding: 28px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    overflow-y: auto;
+    background: rgba(17, 17, 24, 0.5);
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .your-id-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .id-display {
+    font-family: 'DM Mono', monospace;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    margin: 6px 0 12px;
+    text-shadow: 0 0 12px rgba(111, 255, 176, 0.3);
+    word-break: break-all;
+    min-height: 1.4em;
+  }
+
+  .copy-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    background: rgba(111, 255, 176, 0.08);
+    color: var(--accent);
+    border: 1px solid rgba(111, 255, 176, 0.25);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .copy-btn:hover {
+    background: rgba(111, 255, 176, 0.15);
+    border-color: rgba(111, 255, 176, 0.5);
+  }
+
+  .connect-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  input[type="text"] {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.85rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 10px;
+    outline: none;
+    transition: all 0.2s;
+    letter-spacing: 0.04em;
+  }
+
+  input[type="text"]:focus {
+    border-color: var(--accent2);
+    box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.12);
+  }
+
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  .btn-primary {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    color: #000;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(123, 97, 255, 0.35);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* LOG */
+  .log {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    min-height: 0;
+  }
+
+  .log-entry {
+    color: var(--muted);
+    line-height: 1.5;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+
+  .log-entry.info { color: var(--accent); }
+  .log-entry.warn { color: #ffd57e; }
+  .log-entry.err  { color: var(--danger); }
+
+  /* CALL AREA */
+  .call-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Screen share display */
+  .screen-container {
+    width: 100%;
+    max-width: 880px;
+    aspect-ratio: 16/9;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    display: none;
+    box-shadow: 0 0 60px rgba(0,0,0,0.5);
+  }
+
+  .screen-container.active { display: block; }
+
+  .screen-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .screen-label {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    background: rgba(0,0,0,0.7);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 100px;
+    border: 1px solid rgba(111, 255, 176, 0.2);
+  }
+
+  /* Idle avatar state */
+  .idle-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .avatar-ring {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.3s;
+  }
+
+  .avatar-ring.speaking::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    opacity: 0.5;
+    animation: ripple 1.5s ease-out infinite;
+  }
+
+  .avatar-ring.speaking::after {
+    content: '';
+    position: absolute;
+    inset: -18px;
+    border-radius: 50%;
+    border: 1px solid var(--accent);
+    opacity: 0.2;
+    animation: ripple 1.5s ease-out 0.3s infinite;
+  }
+
+  @keyframes ripple {
+    0% { transform: scale(0.9); opacity: 0.5; }
+    100% { transform: scale(1.1); opacity: 0; }
+  }
+
+  .avatar-inner {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.2rem;
+  }
+
+  .peer-name {
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .call-timer {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  /* CONTROLS */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 14px 20px;
+    border-radius: 100px;
+    backdrop-filter: blur(8px);
+  }
+
+  .ctrl-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 1.1rem;
+    position: relative;
+  }
+
+  .ctrl-btn:hover {
+    border-color: var(--accent2);
+    background: rgba(123, 97, 255, 0.12);
+    transform: scale(1.08);
+  }
+
+  .ctrl-btn.active {
+    background: rgba(111, 255, 176, 0.12);
+    border-color: rgba(111, 255, 176, 0.4);
+    color: var(--accent);
+  }
+
+  .ctrl-btn.muted {
+    background: rgba(255, 87, 87, 0.1);
+    border-color: rgba(255, 87, 87, 0.3);
+    color: var(--danger);
+  }
+
+  .ctrl-btn.end-call {
+    width: 56px;
+    height: 56px;
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+    font-size: 1.2rem;
+  }
+
+  .ctrl-btn.end-call:hover {
+    background: #ff3333;
+    transform: scale(1.12);
+    box-shadow: 0 8px 24px rgba(255, 87, 87, 0.4);
+  }
+
+  .ctrl-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .ctrl-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    text-align: center;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: 0.04em;
+  }
+
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Incoming call overlay */
+  .incoming-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .incoming-overlay.show { display: flex; }
+
+  .incoming-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 40px 48px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+    animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(40px) scale(0.95); opacity: 0; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+  }
+
+  .incoming-card h2 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  .incoming-card p {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .incoming-actions {
+    display: flex;
+    gap: 16px;
+  }
+
+  .btn-accept {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: #000;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-accept:hover {
+    transform: scale(1.1);
+    box-shadow: 0 8px 24px rgba(111, 255, 176, 0.4);
+  }
+
+  .btn-reject {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--danger);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-reject:hover {
+    transform: scale(1.1);
+    box-shadow: 0 8px 24px rgba(255, 87, 87, 0.4);
+  }
+
+  .ringing-rings {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    animation: expand 2s ease-out infinite;
+  }
+
+  .ring:nth-child(2) { animation-delay: 0.5s; }
+  .ring:nth-child(3) { animation-delay: 1s; }
+
+  @keyframes expand {
+    0% { transform: scale(0.5); opacity: 0.7; }
+    100% { transform: scale(1.8); opacity: 0; }
+  }
+
+  .ring-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    z-index: 1;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 20px;
+    border-radius: 100px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    z-index: 200;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    white-space: nowrap;
+  }
+
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+  }
+
+  audio { display: none; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="logo">Vox <span>/ connect</span></div>
+    <div class="status-pill" id="statusPill">
+      <div class="dot"></div>
+      <span id="statusText">Initializing…</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Sidebar -->
+    <aside>
+      <!-- Your ID -->
+      <div>
+        <div class="section-label">Your Peer ID</div>
+        <div class="your-id-box">
+          <div class="id-display" id="myId">—</div>
+          <button class="copy-btn" onclick="copyId()">⎘ Copy ID</button>
+        </div>
+      </div>
+
+      <!-- Connect form -->
+      <div>
+        <div class="section-label">Call Someone</div>
+        <div class="connect-form">
+          <input type="text" id="remoteIdInput" placeholder="Paste their Peer ID…" />
+          <button class="btn-primary" id="callBtn" onclick="startCall()" disabled>
+            <span>📞</span> Start Call
+          </button>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+        <div class="section-label">Activity Log</div>
+        <div class="log" id="log"></div>
+      </div>
+    </aside>
+
+    <!-- Call area -->
+    <section class="call-area">
+      <!-- Screen share container -->
+      <div class="screen-container" id="screenContainer">
+        <div class="screen-label">🖥 SCREEN SHARE</div>
+        <video id="remoteScreen" autoplay playsinline></video>
+      </div>
+
+      <!-- Idle / active call visual -->
+      <div class="idle-state" id="idleState">
+        <div class="avatar-ring" id="avatarRing">
+          <div class="avatar-inner">🎙</div>
+        </div>
+        <div class="peer-name" id="peerName">Ready to connect</div>
+        <div class="call-timer" id="callTimer">Share your ID to get started</div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <div class="ctrl-group">
+          <button class="ctrl-btn" id="muteBtn" onclick="toggleMute()" disabled title="Mute">🎙</button>
+          <div class="ctrl-label">Mic</div>
+        </div>
+        <div class="ctrl-group">
+          <button class="ctrl-btn" id="screenBtn" onclick="toggleScreen()" disabled title="Share Screen">🖥</button>
+          <div class="ctrl-label">Screen</div>
+        </div>
+        <div class="ctrl-group">
+          <button class="ctrl-btn end-call" id="hangupBtn" onclick="hangUp()" disabled title="End Call">📵</button>
+          <div class="ctrl-label">End</div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Incoming call overlay -->
+<div class="incoming-overlay" id="incomingOverlay">
+  <div class="incoming-card">
+    <div class="ringing-rings">
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ring-icon">📞</div>
+    </div>
+    <div>
+      <h2>Incoming Call</h2>
+      <p id="callerIdDisplay">from unknown</p>
+    </div>
+    <div class="incoming-actions">
+      <button class="btn-accept" onclick="acceptCall()" title="Accept">✓</button>
+      <button class="btn-reject" onclick="rejectCall()" title="Reject">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- Remote audio -->
+<audio id="remoteAudio" autoplay></audio>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+let peer, currentCall, screenCall;
+let localStream = null, screenStream = null;
+let isMuted = false, isSharing = false;
+let callSeconds = 0, timerInterval = null;
+let pendingCall = null;
+
+// ── Init Peer ──────────────────────────────────────────────
+function initPeer() {
+  log('Connecting to peer network…', 'info');
+  peer = new Peer(undefined, { debug: 0 });
+
+  peer.on('open', id => {
+    document.getElementById('myId').textContent = id;
+    setStatus('Online', true);
+    document.getElementById('callBtn').disabled = false;
+    log(`Your ID: ${id}`, 'info');
+  });
+
+  peer.on('call', incomingCall => {
+    if (incomingCall.metadata?.type === 'screen') {
+      // Auto-accept screen share
+      incomingCall.answer();
+      incomingCall.on('stream', stream => {
+        showRemoteScreen(stream);
+        log('Remote screen share started', 'info');
+      });
+      incomingCall.on('close', () => {
+        hideRemoteScreen();
+        log('Remote screen share ended');
+      });
+    } else {
+      // Voice call — show incoming UI
+      pendingCall = incomingCall;
+      document.getElementById('callerIdDisplay').textContent = `from ${incomingCall.peer}`;
+      document.getElementById('incomingOverlay').classList.add('show');
+      log(`Incoming call from ${incomingCall.peer}`, 'warn');
+    }
+  });
+
+  peer.on('error', err => {
+    log(`Error: ${err.type}`, 'err');
+    setStatus('Error', false);
+  });
+
+  peer.on('disconnected', () => {
+    setStatus('Disconnected', false);
+    log('Disconnected from network', 'warn');
+    peer.reconnect();
+  });
+}
+
+// ── Voice Call ─────────────────────────────────────────────
+async function startCall() {
+  const remoteId = document.getElementById('remoteIdInput').value.trim();
+  if (!remoteId) return showToast('Enter a Peer ID first');
+  if (remoteId === peer.id) return showToast("That's your own ID!");
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    currentCall = peer.call(remoteId, localStream);
+    setupCallHandlers(currentCall, remoteId);
+    log(`Calling ${remoteId}…`, 'info');
+    setCallUI(true, remoteId);
+  } catch (e) {
+    log(`Mic access denied: ${e.message}`, 'err');
+    showToast('Microphone access required');
+  }
+}
+
+async function acceptCall() {
+  document.getElementById('incomingOverlay').classList.remove('show');
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    pendingCall.answer(localStream);
+    currentCall = pendingCall;
+    setupCallHandlers(currentCall, pendingCall.peer);
+    setCallUI(true, pendingCall.peer);
+    log(`Call accepted`, 'info');
+  } catch(e) {
+    log(`Mic access denied`, 'err');
+    showToast('Microphone access required');
+  }
+  pendingCall = null;
+}
+
+function rejectCall() {
+  document.getElementById('incomingOverlay').classList.remove('show');
+  if (pendingCall) { pendingCall.close(); pendingCall = null; }
+  log('Call rejected');
+}
+
+function setupCallHandlers(call, remoteId) {
+  call.on('stream', stream => {
+    document.getElementById('remoteAudio').srcObject = stream;
+    log(`Stream received from ${remoteId}`, 'info');
+  });
+  call.on('close', () => {
+    log(`Call with ${remoteId} ended`);
+    endCallCleanup();
+  });
+  call.on('error', err => log(`Call error: ${err}`, 'err'));
+}
+
+function hangUp() {
+  if (currentCall) currentCall.close();
+  if (screenCall) screenCall.close();
+  if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); }
+  endCallCleanup();
+  log('Call ended');
+}
+
+function endCallCleanup() {
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+  currentCall = null; screenCall = null;
+  isMuted = false; isSharing = false;
+  clearInterval(timerInterval); timerInterval = null; callSeconds = 0;
+  setCallUI(false);
+  hideRemoteScreen();
+}
+
+// ── Screen Share ───────────────────────────────────────────
+async function toggleScreen() {
+  if (!currentCall) return;
+  if (isSharing) {
+    if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+    if (screenCall) { screenCall.close(); screenCall = null; }
+    isSharing = false;
+    updateScreenBtn();
+    log('Screen sharing stopped');
+    showToast('Screen sharing stopped');
+  } else {
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      screenCall = peer.call(currentCall.peer, screenStream, { metadata: { type: 'screen' } });
+      screenStream.getVideoTracks()[0].onended = () => {
+        isSharing = false; screenStream = null; screenCall = null;
+        updateScreenBtn();
+        log('Screen sharing stopped');
+      };
+      isSharing = true;
+      updateScreenBtn();
+      log('Screen sharing started', 'info');
+      showToast('Screen sharing started');
+    } catch(e) {
+      log(`Screen share failed: ${e.message}`, 'err');
+      showToast('Screen share cancelled');
+    }
+  }
+}
+
+function showRemoteScreen(stream) {
+  const vid = document.getElementById('remoteScreen');
+  vid.srcObject = stream;
+  document.getElementById('screenContainer').classList.add('active');
+  document.getElementById('idleState').style.opacity = '0.3';
+}
+
+function hideRemoteScreen() {
+  document.getElementById('remoteScreen').srcObject = null;
+  document.getElementById('screenContainer').classList.remove('active');
+  document.getElementById('idleState').style.opacity = '1';
+}
+
+// ── Mute ───────────────────────────────────────────────────
+function toggleMute() {
+  if (!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  const btn = document.getElementById('muteBtn');
+  btn.textContent = isMuted ? '🔇' : '🎙';
+  btn.classList.toggle('muted', isMuted);
+  showToast(isMuted ? 'Muted' : 'Unmuted');
+}
+
+// ── UI Helpers ─────────────────────────────────────────────
+function setCallUI(active, peerId = '') {
+  document.getElementById('muteBtn').disabled = !active;
+  document.getElementById('screenBtn').disabled = !active;
+  document.getElementById('hangupBtn').disabled = !active;
+
+  if (active) {
+    document.getElementById('peerName').textContent = peerId.substring(0, 16) + (peerId.length > 16 ? '…' : '');
+    document.getElementById('avatarRing').classList.add('speaking');
+    callSeconds = 0;
+    document.getElementById('callTimer').textContent = '00:00';
+    timerInterval = setInterval(() => {
+      callSeconds++;
+      const m = String(Math.floor(callSeconds / 60)).padStart(2,'0');
+      const s = String(callSeconds % 60).padStart(2,'0');
+      document.getElementById('callTimer').textContent = `${m}:${s}`;
+    }, 1000);
+  } else {
+    document.getElementById('peerName').textContent = 'Ready to connect';
+    document.getElementById('callTimer').textContent = 'Share your ID to get started';
+    document.getElementById('avatarRing').classList.remove('speaking');
+    document.getElementById('muteBtn').textContent = '🎙';
+    document.getElementById('muteBtn').classList.remove('muted');
+    updateScreenBtn();
+  }
+}
+
+function updateScreenBtn() {
+  const btn = document.getElementById('screenBtn');
+  btn.classList.toggle('active', isSharing);
+  btn.textContent = isSharing ? '⏹' : '🖥';
+}
+
+function setStatus(text, online) {
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('statusPill').classList.toggle('connected', online);
+}
+
+function copyId() {
+  const id = document.getElementById('myId').textContent;
+  if (id === '—') return;
+  navigator.clipboard.writeText(id).then(() => showToast('ID copied to clipboard!'));
+}
+
+let toastTimeout;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function log(msg, type = '') {
+  const el = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  const t = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  entry.textContent = `[${t}] ${msg}`;
+  el.appendChild(entry);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Boot ───────────────────────────────────────────────────
+initPeer();
+</script>
+</body>
+</html>
